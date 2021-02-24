@@ -1,26 +1,17 @@
-record Murmur3.HashData {
-  shift : Number,
-  seed : Number,
-  hash : Number,
-  charsProcessed : Number
-}
-
 module Murmur3 {
-  const C1 = 3432918353
-
-  const C2 = 461845907
-
   /*
   Takes a seed and a string and produces a 32 bit hash.
 
   Given the same seed and string, it will always produce the same hash.
 
-  Murmur3.hash32(1234 "Turn me into a hash" == 4138100590)
+  ```mint
+  Murmur3.hash32(1234, "Turn me into a hash") == 4138100590
+  ```
   */
   fun hash32 (seed : Number, str : String) : Number {
     str
-    |> stringCodepointReduce(init, hashFold)
-    |> finalize()
+    |> Murmur3.Private.stringCodepointReduce(init, Murmur3.Private.hashFold)
+    |> Murmur3.Private.finalize()
   } where {
     init =
       {
@@ -30,9 +21,28 @@ module Murmur3 {
         charsProcessed = 0
       }
   }
+}
 
+/* Private data structure for computing a 32bit hash */
+record Murmur3.Private.HashData {
+  shift : Number,
+  seed : Number,
+  hash : Number,
+  charsProcessed : Number
+}
+
+/*
+Private internals of Murmur3, do not use these.
+
+The public interface is in the `Murmur3` module.
+*/
+module Murmur3.Private {
+  const C1 = 3432918353
+
+  const C2 = 461845907
+
+  /* 32-bit multiplication */
   fun multiplyBy (b : Number, a : Number) : Number {
-    /* 32-bit multiplication */
     w + z
   } where {
     w =
@@ -48,18 +58,19 @@ module Murmur3 {
       Bitwise.leftShift(16, y)
   }
 
+  /*
+   Given a 32bit int and an int representing a number of bit positions,
+  returns the 32bit int rotated left by that number of positions.
+  rotlBy : Int -> Int -> Int
+  */
   fun rotlBy (b : Number, a : Number) : Number {
-    /*
-     Given a 32bit int and an int representing a number of bit positions,
-    returns the 32bit int rotated left by that number of positions.
-    rotlBy : Int -> Int -> Int
-    */
     Bitwise.or(
       (Bitwise.leftShift(b, a)),
       (Bitwise.zeroFillRightShift((32 - b), a)))
   }
 
-  fun hashFold (data : Murmur3.HashData, char : Number) : Murmur3.HashData {
+  /* handles each char of the input string */
+  fun hashFold (data : Murmur3.Private.HashData, char : Number) : Murmur3.Private.HashData {
     case (data.shift) {
       24 =>
         {
@@ -90,15 +101,15 @@ module Murmur3 {
   } where {
     res =
       k1
-      |> Murmur3.multiplyBy(Murmur3:C1)
-      |> Murmur3.rotlBy(15)
-      |> multiplyBy(Murmur3:C2)
+      |> multiplyBy(C1)
+      |> rotlBy(15)
+      |> multiplyBy(C2)
       |> Bitwise.xor(h1)
       |> rotlBy(13)
       |> multiplyBy(5)
   }
 
-  fun finalize (data : Murmur3.HashData) : Number {
+  fun finalize (data : Murmur3.Private.HashData) : Number {
     Bitwise.xor(h2, Bitwise.zeroFillRightShift(16, h2))
     |> Bitwise.zeroFillRightShift(0)
   } where {
@@ -107,9 +118,9 @@ module Murmur3 {
         data.seed
       } else {
         data.hash
-        |> Murmur3.multiplyBy(Murmur3:C1)
-        |> Murmur3.rotlBy(15)
-        |> Murmur3.multiplyBy(Murmur3:C2)
+        |> multiplyBy(C1)
+        |> rotlBy(15)
+        |> multiplyBy(C2)
         |> Bitwise.xor(data.seed)
       }
 
@@ -118,13 +129,17 @@ module Murmur3 {
 
     h1 =
       Bitwise.xor(h0, Bitwise.zeroFillRightShift(16, h0))
-      |> Murmur3.multiplyBy(2246822507)
+      |> multiplyBy(2246822507)
 
     h2 =
       Bitwise.xor(h1, (Bitwise.zeroFillRightShift(13, h1)))
-      |> Murmur3.multiplyBy(3266489909)
+      |> multiplyBy(3266489909)
   }
 
+  /*
+  reduce over 32 bit codepoints of a string. handles joining surrogate pairs
+   into a single codepoint
+  */
   fun stringCodepointReduce (start : a, fn : Function(a, Number, a), str : String) : a {
     res[1]
   } where {
@@ -148,6 +163,7 @@ module Murmur3 {
         })
   }
 
+  /* combines 16 bit surrogate pairs into a 32 bit integer */
   fun joinSurrogatePair (l : Number, r : String) : Number {
     (l - a) * b + c - d + e
   } where {
@@ -167,6 +183,7 @@ module Murmur3 {
       (`0x10000` as Number)
   }
 
+  /* determines if a character is the start of a 16 bit surrogate pair */
   fun isSurrogatePair (c : String) : Tuple(Bool, Number) {
     if ((`0xD800` as Number) <= code && code <= (`0xDBFF` as Number)) {
       {true, code}
